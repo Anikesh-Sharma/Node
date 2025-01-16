@@ -18,7 +18,7 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    return req.headers.authorization || 'anonymous';
+    return req.headers['x-forwarded-for'] || req.ip || 'anonymous';
   }
 });
 
@@ -83,6 +83,14 @@ const authMiddleware = (allowedRoles = ['user']) => {
   };
 };
 
+// Mock data
+let courses = [];
+let users = [
+  { id: '1', email: 'admin@example.com', role: 'admin', name: 'Admin User' },
+  { id: '2', email: 'instructor@example.com', role: 'instructor', name: 'John Doe' },
+  { id: '3', email: 'student@example.com', role: 'student', name: 'Jane Smith' }
+];
+
 // Root route
 app.get('/', (req, res) => {
   res.json({
@@ -90,13 +98,81 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
-      courses: '/api/courses'
+      courses: '/api/courses',
+      analytics: '/api/analytics'
     }
   });
 });
 
-// Mock course data (since we don't have MongoDB)
-let courses = [];
+// Analytics routes
+app.get('/api/analytics/user-count', authMiddleware(['admin']), (req, res) => {
+  try {
+    // Group users by role
+    const roleDistribution = users.reduce((acc, user) => {
+      acc[user.role] = (acc[user.role] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Convert to array format
+    const analytics = Object.entries(roleDistribution).map(([role, count]) => ({
+      role,
+      count
+    }));
+
+    // Sort by count descending
+    analytics.sort((a, b) => b.count - a.count);
+
+    logger.info('User analytics generated successfully');
+    res.json({
+      totalUsers: users.length,
+      roleDistribution: analytics
+    });
+  } catch (error) {
+    logger.error('Error generating user analytics:', error);
+    res.status(500).json({ error: 'Failed to generate user analytics' });
+  }
+});
+
+app.get('/api/analytics/course-count', authMiddleware(['admin']), (req, res) => {
+  try {
+    // Group courses by category
+    const categoryGroups = courses.reduce((acc, course) => {
+      const category = course.category || 'Uncategorized';
+      if (!acc[category]) {
+        acc[category] = {
+          count: 0,
+          totalEnrolled: 0,
+          totalCapacity: 0
+        };
+      }
+      acc[category].count++;
+      acc[category].totalEnrolled += course.enrolledStudents.length;
+      acc[category].totalCapacity += course.capacity || 0;
+      return acc;
+    }, {});
+
+    // Convert to array format with calculated metrics
+    const analytics = Object.entries(categoryGroups).map(([category, data]) => ({
+      category,
+      count: data.count,
+      totalEnrolled: data.totalEnrolled,
+      averageCapacity: Math.round((data.totalCapacity / data.count) * 100) / 100,
+      enrollmentRate: Math.round((data.totalEnrolled / data.totalCapacity) * 100 * 100) / 100
+    }));
+
+    // Sort by count descending
+    analytics.sort((a, b) => b.count - a.count);
+
+    logger.info('Course analytics generated successfully');
+    res.json({
+      totalCourses: courses.length,
+      categoryDistribution: analytics
+    });
+  } catch (error) {
+    logger.error('Error generating course analytics:', error);
+    res.status(500).json({ error: 'Failed to generate course analytics' });
+  }
+});
 
 // Course routes
 app.post('/api/courses', authMiddleware(['admin', 'instructor']), (req, res) => {
@@ -112,7 +188,18 @@ app.post('/api/courses', authMiddleware(['admin', 'instructor']), (req, res) => 
 });
 
 app.get('/api/courses', authMiddleware(['admin', 'instructor', 'student']), (req, res) => {
-  res.json(courses);
+  // Transform courses to match the expected frontend format
+  const transformedCourses = courses.map(course => ({
+    id: course.id,
+    title: course.title,
+    instructor: course.instructor,
+    progress: Math.floor(Math.random() * 100), // Mock progress
+    totalModules: 10, // Mock total modules
+    completedModules: Math.floor(Math.random() * 10), // Mock completed modules
+    nextLesson: 'Introduction to React', // Mock next lesson
+    duration: '8 weeks' // Mock duration
+  }));
+  res.json(transformedCourses);
 });
 
 app.post('/api/courses/:courseId/enroll/:studentId', authMiddleware(['admin', 'instructor']), (req, res) => {

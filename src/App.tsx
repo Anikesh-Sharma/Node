@@ -92,7 +92,9 @@ function App() {
         setApiStatus(response.data.message);
         setError(null);
       } catch (err) {
-        setError('Failed to connect to the API');
+        if (err instanceof Error) {
+          setError('Failed to connect to the API');
+        }
         setApiStatus('Offline');
       }
     };
@@ -106,7 +108,9 @@ function App() {
         });
         setCourses(response.data);
       } catch (err) {
-        console.error('Failed to fetch courses:', err);
+        if (err instanceof Error) {
+          setError(`Failed to fetch courses: ${err.message}`);
+        }
       }
     };
 

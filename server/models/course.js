@@ -11,6 +11,11 @@ const courseSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  category: {
+    type: String,
+    required: true,
+    enum: ['Programming', 'Design', 'Business', 'Marketing', 'Other']
+  },
   instructor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
